@@ -1,0 +1,21 @@
+{
+  "name": "sample-app-backend",
+  "version": "1.0.0",
+  "description": "Express REST API for the Tasks demo app, backed by DynamoDB, deployed on ECS Fargate",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.651.1",
+    "@aws-sdk/lib-dynamodb": "3.651.1",
+    "cors": "2.8.5",
+    "express": "4.21.0",
+    "morgan": "1.10.0"
+  }
+}
