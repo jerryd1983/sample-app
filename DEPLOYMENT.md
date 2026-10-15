@@ -71,10 +71,17 @@ Amplify auto-rebuilds on every push to the connected branch.
 
    > If you leave this unchecked, Amplify looks at the repo root, finds no
    > `package.json` there, and the build fails.
-5. Continue to **App settings**. Amplify detects Vite and reads the build spec at
-   `frontend/amplify.yml` (already in the repo). It builds with
-   `npm ci && npm run build` and publishes the `dist` folder. Leave the
-   auto-detected settings as-is.
+5. Continue to **App settings**. Amplify reads the monorepo build spec at the
+   **repo root** `amplify.yml` (already in the repo). It uses the `applications:`
+   format with `appRoot: frontend`, builds with `npm install && npm run build`,
+   and publishes `frontend/dist`. Leave the auto-detected settings as-is.
+
+   > **Why the spec is at the repo root (not in `frontend/`):** when the
+   > monorepo checkbox is ticked, Amplify requires a build spec with an
+   > `applications:` key and reads it from the repository root. A single-app
+   > spec (top-level `frontend:` with no `applications:`) produces the build
+   > error `Monorepo spec provided without "applications" key`. The included
+   > root `amplify.yml` already uses the correct monorepo format.
 
 ### 1.3 Set the backend URL environment variable
 
