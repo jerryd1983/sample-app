@@ -166,20 +166,6 @@ looks like:
 
 That's the value you'll use in 2.6 and in the ECS task definition.
 
-> **Why the console avoids the "invalid endpoint" error:** that CLI error comes
-> from an empty or malformed `--region`/`$AWS_REGION`. The console sets the
-> region for you via the region selector, so there's no endpoint to mistype.
-> You still need the CLI for the Docker login and push below (2.5–2.6) — there
-> is no way to upload an image through the console — but the region issue there
-> is easy to avoid: pass `--region us-east-1` explicitly, or run
-> `aws configure set region us-east-1` once.
-
-> **Shortcut — let the console generate your push commands:** open the
-> repository → **View push commands** (button, top-right). AWS shows the exact
-> `docker login`, `tag`, and `push` commands for *this* repo with your account
-> ID and region already filled in. You can copy those straight onto the EC2 box
-> instead of typing the ones in 2.5–2.6 by hand.
-
 ### 2.5 Authenticate Docker to ECR
 
 > **First set the region** on the EC2 box so you don't hit "invalid endpoint".
