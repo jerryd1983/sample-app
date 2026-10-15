@@ -168,6 +168,14 @@ That's the value you'll use in 2.6 and in the ECS task definition.
 
 ### 2.5 Authenticate Docker to ECR
 
+Your ECR repository is private, so ECR rejects anonymous pushes and pulls. The
+`get-login-password` command asks AWS (using the instance's IAM role) for a
+short-lived authentication token, and `docker login` hands that token to Docker.
+This proves to ECR that you're allowed to push, and it links Docker to *your*
+account's registry endpoint so `docker push` knows where the image should go.
+The token expires after 12 hours, so re-run this command if a later push is
+rejected with an auth error.
+
 > **First set the region** on the EC2 box so you don't hit "invalid endpoint".
 > Either export the variables or just hardcode the region in the commands:
 > ```bash
