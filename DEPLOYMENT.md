@@ -348,6 +348,28 @@ prompted. To create it manually:
 > You attach **both** roles in the task definition: `ecsTaskExecutionRole` as the
 > *task execution role*, and `sample-app-task-role` as the *task role*.
 
+### Key ECS concepts (quick reference)
+
+Before creating these, here's what the pieces are:
+
+- **Cluster** — a logical grouping that your tasks and services run in. With
+  Fargate it's just a namespace; you don't manage any servers.
+- **Task definition** — the **blueprint** for your container(s): which image to
+  run, how much CPU/memory, port mappings, environment variables, and the IAM
+  roles. It's a template and doesn't run anything on its own. Each edit creates a
+  new **revision**.
+- **Task** — one **running instance** of a task definition (your container
+  actually running). You can run a task once and let it stop, but for a web API
+  you want it always on — that's what a service is for.
+- **Service** — the **manager** that keeps a desired number of tasks running from
+  a task definition. It launches them, replaces any that crash or fail health
+  checks, registers them with the load balancer, and handles rolling updates when
+  you deploy a new revision.
+
+> **Analogy:** the task definition is a *recipe*, a task is one *cooked dish*,
+> and the service is the *kitchen manager* making sure there's always the desired
+> number of fresh dishes on the counter.
+
 ### 2.8 Create the ECS cluster and task definition
 
 #### Create the cluster
