@@ -127,6 +127,26 @@ docker --version
 aws --version
 ```
 
+Confirm the Docker **daemon** is actually running (installing Docker doesn't
+always start it):
+
+```bash
+sudo systemctl status docker      # should say "active (running)"
+```
+
+If it's not running, start it (and enable it so it survives reboots):
+
+```bash
+sudo systemctl enable --now docker
+```
+
+> **If a later `docker` command fails with**
+> `Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?`
+> the daemon isn't started — run `sudo systemctl start docker`. If instead you
+> get a **permission denied** on the socket, your user isn't in the `docker`
+> group yet: run `sudo usermod -aG docker $USER` then `newgrp docker` (or prefix
+> the command with `sudo` as a quick test).
+
 ### 2.3 Get the code onto the instance
 
 ```bash
@@ -408,6 +428,9 @@ aws dynamodb put-item \
 
 ## Troubleshooting
 
+- **`docker build` fails with "Cannot connect to the Docker daemon ... Is the docker daemon running?"** → the Docker service isn't started. Run `sudo systemctl start docker` (and `sudo systemctl enable docker` so it starts on reboot). See step 2.2.
+- **`docker` fails with "permission denied" on `/var/run/docker.sock`** → your user isn't in the `docker` group. Run `sudo usermod -aG docker $USER` then `newgrp docker`, or prefix the command with `sudo` as a quick test.
+- **Image builds with an empty/odd name** → the `$ECR_REPO`/`$AWS_REGION`/`$AWS_ACCOUNT_ID` variables aren't set in the current shell. Re-run the `export` lines from step 2.5 and verify with `echo "$ECR_REPO"`.
 - **Frontend loads but tasks fail to load** → `VITE_API_BASE_URL` wrong/missing, or CORS. Check the browser console; set `CORS_ORIGIN` on the backend to the exact Amplify origin.
 - **`/health` shows `in-memory`** → container can't reach DynamoDB. Check task role policy, region, table name, and that the tasks have a network path to DynamoDB (VPC endpoint or NAT).
 - **ECS task won't start / can't pull image** → task *execution* role missing ECR permissions, or wrong image URI.
