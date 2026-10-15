@@ -225,6 +225,19 @@ docker push \
   "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest"
 ```
 
+**What each line does:**
+
+- `docker build -t "$ECR_REPO" .` — reads the `Dockerfile` in the current folder
+  (the `.`) and builds the image, copying in your source and running
+  `npm install`. The `-t` tags it with a local name (`sample-app-backend`).
+- `docker tag "$ECR_REPO:latest" "<account>.dkr.ecr.<region>.amazonaws.com/..."`
+  — adds a second name to that same image: its full ECR address. Docker uses
+  this address to know which registry and repository to push to. (It doesn't
+  copy the image, just labels it.)
+- `docker push "<account>.dkr.ecr.<region>.amazonaws.com/...:latest"` — uploads
+  the tagged image to your private ECR repository. This is the step that
+  actually gets the image into AWS so ECS can pull it.
+
 Your image URI (used in the ECS task definition):
 
 ```
