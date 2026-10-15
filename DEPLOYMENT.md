@@ -335,51 +335,119 @@ prompted. To create it manually:
 
 ### 2.8 Create the ECS cluster and task definition
 
-1. ECS console → **Clusters** → **Create cluster**. Choose **AWS Fargate**
-   (serverless). Name it e.g. `sample-app-cluster`.
-2. **Task definitions** → **Create new task definition**:
-   - Launch type: **Fargate**
-   - CPU/memory: `0.25 vCPU` / `0.5 GB` is enough for the demo
-   - **Container**:
-     - Name: `backend`
-     - Image URI: the one from 2.6
-     - Port mapping: **container port `8080`**, protocol TCP
-   - **Environment variables** on the container:
-     | Variable      | Value                               |
-     | ------------- | ----------------------------------- |
-     | `PORT`        | `8080`                              |
-     | `AWS_REGION`  | `us-east-1`                         |
-     | `TASKS_TABLE` | `Tasks`                             |
-     | `CORS_ORIGIN` | your Amplify URL (from Part 1.4)    |
-   - **Task role**: select `sample-app-task-role` (created in 2.7). This is what
-     lets the running container read/write DynamoDB.
-   - **Task execution role**: select `ecsTaskExecutionRole` (created in 2.7).
-     This lets ECS pull the image from ECR and write logs.
-   - Enable **CloudWatch logs** so you can see container output.
+#### Create the cluster
+
+1. Open the Amazon ECS console at **console.aws.amazon.com/ecs/v2**.
+2. **Clusters** → **Create cluster**.
+3. **Cluster name:** `sample-app-cluster`.
+4. Under **Infrastructure**, make sure **AWS Fargate (serverless)** is checked
+   (it's the default). Leave everything else at defaults.
+5. **Create**.
+
+#### Create the task definition (new console flow)
+
+ECS now walks you through the task definition in named sections. **Task
+definitions** → **Create new task definition** (the console form, not JSON):
+
+1. **Task definition configuration**
+   - **Task definition family:** `sample-app-backend`
+
+2. **Infrastructure requirements**
+   - **Launch type:** **AWS Fargate**
+   - **Operating system/Architecture:** **Linux/X86_64**
+   - **Task size:** **CPU** = `.25 vCPU`, **Memory** = `.5 GB`
+   - **Task role:** select `sample-app-task-role` (created in 2.7) — lets the
+     running container read/write DynamoDB.
+   - **Task execution role:** select `ecsTaskExecutionRole` (created in 2.7) —
+     lets ECS pull the image from ECR and write logs. (If the dropdown offers
+     "Create new role", you can let it create the default execution role here.)
+
+3. **Container - 1** (the "Container" section)
+   - **Name:** `backend`
+   - **Image URI:** paste the full URI from 2.6, e.g.
+     `944642316987.dkr.ecr.us-east-1.amazonaws.com/sample-app-backend:latest`
+   - **Essential container:** **Yes**
+   - **Port mappings:** **Container port** = `8080`, **Protocol** = `TCP`,
+     **App protocol** = `HTTP` (you can leave the port name at its default).
+
+4. **Environment variables** (scroll down within the Container section →
+   **Environment variables** → **Add environment variable** for each row):
+   | Key           | Value                            |
+   | ------------- | -------------------------------- |
+   | `PORT`        | `8080`                           |
+   | `AWS_REGION`  | `us-east-1`                      |
+   | `TASKS_TABLE` | `Tasks`                          |
+   | `CORS_ORIGIN` | your Amplify URL (from Part 1.4) |
+
+   > `AWS_REGION` is often set automatically in Fargate, but setting it
+   > explicitly here is harmless and makes the config self-documenting.
+
+5. **Logging** (also within the Container section)
+   - Leave **Use log collection** toggled **on** — the console creates an
+     `awslogs` driver sending container output to CloudWatch Logs. (This is the
+     renamed "CloudWatch logs" option from the older UI.)
+
+6. Leave **Storage**, **Monitoring**, and **Tags** at their defaults.
+
+7. Click **Create**.
+
+> **Not seeing these sections?** If your console shows a single long form or a
+> "JSON" editor instead, you're likely in the classic console or on the JSON
+> tab. Switch to the standard **Create new task definition** form; the sections
+> above (Task definition configuration → Infrastructure requirements →
+> Container) are the current default experience.
 
 ### 2.9 Create the service behind an internet-facing ALB
 
-1. In the cluster → **Create service**.
-   - Launch type: **Fargate**, Task definition: the one from 2.8, Desired tasks: `1`.
-2. **Networking:**
-   - Pick your VPC. Place **tasks in private subnets** (no public IP) for a clean
-     setup, or public subnets with "assign public IP" on if you want to skip NAT
-     for the demo.
-   - The tasks need to reach DynamoDB. Either add a **DynamoDB gateway VPC
-     endpoint** (free, recommended) or ensure a NAT gateway exists.
-3. **Load balancer:**
-   - Create an **Application Load Balancer**, **scheme = internet-facing**, in
-     **public subnets**. (It must be public — the browser calls it directly from
-     the internet. A private/internal ALB would be unreachable from the Amplify
-     frontend.)
-   - Listener: `80` (or `443` with an ACM certificate for HTTPS).
-   - Target group: protocol HTTP, **port `8080`**, target type **IP**.
-   - **Health check path: `/health`** (the app exposes this).
-4. **Security groups:**
+Open your cluster (`sample-app-cluster`) → the **Services** tab → **Create**.
+The new console groups the form into collapsible sections:
+
+1. **Environment** (sometimes shown as "Compute configuration")
+   - **Compute options:** **Launch type**
+   - **Launch type:** **FARGATE**, **Platform version:** **LATEST**
+
+2. **Deployment configuration**
+   - **Application type:** **Service**
+   - **Task definition — Family:** `sample-app-backend`, **Revision:** the latest
+     (the one from 2.8)
+   - **Service name:** `sample-app-service`
+   - **Desired tasks:** `1`
+
+3. **Networking**
+   - **VPC:** pick your VPC.
+   - **Subnets:** choose **private** subnets for a clean setup (tasks get no
+     public IP), or public subnets if you want to skip NAT for the demo.
+   - **Security group:** create a new one (this is the **task SG**) — you'll
+     tighten it in step 5 so only the ALB can reach port `8080`.
+   - **Public IP:** **Turned off** for private subnets; **Turned on** only if you
+     put the tasks in public subnets without NAT.
+   - The tasks must reach DynamoDB: add a **DynamoDB gateway VPC endpoint**
+     (free, recommended) or ensure a **NAT gateway** exists for private subnets.
+
+4. **Load balancing**
+   - **Load balancer type:** **Application Load Balancer**
+   - **Application Load Balancer:** **Create a new load balancer**
+   - **Load balancer name:** `sample-app-alb`
+   - **Scheme:** this is set when the ALB is created — it must be
+     **internet-facing** (the browser calls it directly; an internal ALB would be
+     unreachable from Amplify). The service wizard creates an internet-facing ALB
+     by default; if you created the ALB separately, make sure you chose
+     internet-facing.
+   - **Listener:** create a new one on **port 80 / HTTP** (or 443/HTTPS with an
+     ACM certificate).
+   - **Target group:** create a new one — **protocol HTTP**, the console sets
+     target type to **IP** for Fargate automatically.
+   - **Health check path:** `/health`  (the app exposes this; override the
+     default `/` here).
+
+5. **After the service is created — lock down the security groups** (EC2 console
+   → Security Groups):
    - **ALB SG:** inbound `80`/`443` from `0.0.0.0/0`.
-   - **Task SG:** inbound `8080` **only from the ALB security group** (not the
-     internet).
-5. Create the service. When it's healthy, note the **ALB DNS name**:
+   - **Task SG:** inbound `8080` **only from the ALB security group** (set the
+     source to the ALB SG, not an IP range).
+
+6. Click **Create**. When the service stabilizes and the target is **healthy**,
+   find the **ALB DNS name** in the EC2 → Load Balancers console:
    ```
    http://sample-app-alb-123456.us-east-1.elb.amazonaws.com
    ```
