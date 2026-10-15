@@ -138,30 +138,60 @@ cd sample-app/backend
 > personal access token when prompted, or install the GitHub CLI (`gh`) and run
 > `gh auth login`. Only the `backend/` folder is needed for the build.
 
-### 2.4 Create the ECR repository (one time)
+### 2.4 Create the ECR repository (one time) — console (GUI)
 
-```bash
-aws ecr create-repository \
-  --repository-name "$ECR_REPO" \
-  --region "$AWS_REGION"
+Create the repository in the AWS console instead of the CLI:
+
+1. Open the **Amazon ECR** console.
+2. In the top-right **region selector**, choose your region (e.g.
+   **US East (N. Virginia) us-east-1**). This is the region the repo lives in —
+   make sure it matches the region you use everywhere else.
+3. Left nav → **Repositories** → make sure the **Private** tab is selected
+   (not **Public**).
+4. Click **Create repository**.
+5. **Visibility settings:** leave it on **Private**. (Private is correct here —
+   your ECS task pulls the image using its IAM role, so it never needs to be
+   public.)
+6. **Repository name:** `sample-app-backend`.
+7. Leave the rest at defaults (tag mutability, scan-on-push, encryption are all
+   fine as-is for a demo).
+8. Click **Create repository**.
+
+After it's created, open the repository and note its **URI** at the top — it
+looks like:
+
+```
+<account>.dkr.ecr.<region>.amazonaws.com/sample-app-backend
 ```
 
-> **Private vs. public:** this creates a **private** repository. ECR has two
-> separate services with two different commands:
-> - `aws ecr create-repository` → **private** registry (used here; the default)
-> - `aws ecr-public create-repository` → **public** registry (note the
->   `ecr-public` command)
->
-> Private is correct for this setup — your ECS task pulls the image using its
-> IAM role, so the image never needs to be public. A private image URI looks
-> like `<account>.dkr.ecr.<region>.amazonaws.com/...`; a public one would look
-> like `public.ecr.aws/...`. Confirm what you created with:
->
-> ```bash
-> aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION"
-> ```
+That's the value you'll use in 2.6 and in the ECS task definition.
+
+> **Why the console avoids the "invalid endpoint" error:** that CLI error comes
+> from an empty or malformed `--region`/`$AWS_REGION`. The console sets the
+> region for you via the region selector, so there's no endpoint to mistype.
+> You still need the CLI for the Docker login and push below (2.5–2.6) — there
+> is no way to upload an image through the console — but the region issue there
+> is easy to avoid: pass `--region us-east-1` explicitly, or run
+> `aws configure set region us-east-1` once.
+
+> **Shortcut — let the console generate your push commands:** open the
+> repository → **View push commands** (button, top-right). AWS shows the exact
+> `docker login`, `tag`, and `push` commands for *this* repo with your account
+> ID and region already filled in. You can copy those straight onto the EC2 box
+> instead of typing the ones in 2.5–2.6 by hand.
 
 ### 2.5 Authenticate Docker to ECR
+
+> **First set the region** on the EC2 box so you don't hit "invalid endpoint".
+> Either export the variables or just hardcode the region in the commands:
+> ```bash
+> export AWS_REGION=us-east-1
+> export AWS_ACCOUNT_ID=123456789012     # your 12-digit account ID
+> export ECR_REPO=sample-app-backend
+> # verify:
+> echo "region='$AWS_REGION' account='$AWS_ACCOUNT_ID'"
+> aws configure list        # 'region' should not be empty
+> ```
 
 ```bash
 aws ecr get-login-password --region "$AWS_REGION" \
