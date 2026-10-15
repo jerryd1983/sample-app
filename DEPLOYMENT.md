@@ -58,15 +58,23 @@ Amplify auto-rebuilds on every push to the connected branch.
 
 1. Open the **AWS Amplify** console → **Create new app** → **Host web app**.
 2. Choose **GitHub** as the source and authorize AWS Amplify to access your repos.
-3. Select the **`jerryd1983/sample-app`** repository and the **`main`** branch.
-4. **Monorepo setting:** this repo has both `frontend/` and `backend/`, so tell
-   Amplify the app lives in a subfolder. Set the **app root directory** to:
+3. On **Add repository and branch**, select the **`jerryd1983/sample-app`**
+   repository and the **`main`** branch.
+4. **Tick the "My app is a monorepo" checkbox.** This repo has both `frontend/`
+   and `backend/` at the root, and the React app lives in the `frontend`
+   subfolder — not at the repo root — so Amplify needs to know where the app is.
+   In the **Monorepo root directory** field that appears, enter exactly:
    ```
    frontend
    ```
-5. Amplify detects Vite and reads the build spec at `frontend/amplify.yml`
-   (already in the repo). It builds with `npm ci && npm run build` and publishes
-   the `dist` folder. Leave the auto-detected settings as-is.
+   (no leading slash — just the folder name).
+
+   > If you leave this unchecked, Amplify looks at the repo root, finds no
+   > `package.json` there, and the build fails.
+5. Continue to **App settings**. Amplify detects Vite and reads the build spec at
+   `frontend/amplify.yml` (already in the repo). It builds with
+   `npm ci && npm run build` and publishes the `dist` folder. Leave the
+   auto-detected settings as-is.
 
 ### 1.3 Set the backend URL environment variable
 
