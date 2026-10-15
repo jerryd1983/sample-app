@@ -452,24 +452,37 @@ The new console groups the form into collapsible sections:
 
 3. **Networking**
    - **VPC:** pick your VPC.
-   - **Subnets:** choose **private** subnets for a clean setup (tasks get no
-     public IP), or public subnets if you want to skip NAT for the demo.
+   - **Subnets:** select **at least two subnets in two different Availability
+     Zones** (e.g. one in `us-east-1a` and one in `us-east-1b`). The ALB
+     *requires* two AZs — selecting only one subnet fails with
+     *"At least two subnets in two different Availability Zones must be
+     specified."*
+   - **Choose PUBLIC subnets** here. The quick-create wizard uses this **same
+     subnet list for both the ALB and the tasks**, and it does **not** offer a
+     public/internal toggle — it infers the ALB scheme from the subnets:
+     public subnets → **internet-facing** ALB (what you want); private subnets →
+     **internal** ALB (unreachable from Amplify). In a **default VPC**, all the
+     default subnets are public, so any two of them work. To verify a subnet is
+     public, check its route table for a `0.0.0.0/0 → igw-...` route in the VPC
+     console.
    - **Security group:** create a new one (this is the **task SG**) — you'll
      tighten it in step 5 so only the ALB can reach port `8080`.
-   - **Public IP:** **Turned off** for private subnets; **Turned on** only if you
-     put the tasks in public subnets without NAT.
-   - The tasks must reach DynamoDB: add a **DynamoDB gateway VPC endpoint**
-     (free, recommended) or ensure a **NAT gateway** exists for private subnets.
+   - **Public IP:** **Turned on.** Because the tasks share the public subnets
+     here, they need a public IP to pull the image from ECR and reach DynamoDB
+     without a NAT gateway.
+   - The tasks must reach DynamoDB. With public subnets + public IP (above),
+     outbound internet covers this. (The cleaner "ALB public / tasks private"
+     split isn't available in this one-subnet-list wizard — it needs a
+     separately created ALB, which is more than a demo requires.)
 
 4. **Load balancing**
    - **Load balancer type:** **Application Load Balancer**
    - **Application Load Balancer:** **Create a new load balancer**
    - **Load balancer name:** `sample-app-alb`
-   - **Scheme:** this is set when the ALB is created — it must be
-     **internet-facing** (the browser calls it directly; an internal ALB would be
-     unreachable from Amplify). The service wizard creates an internet-facing ALB
-     by default; if you created the ALB separately, make sure you chose
-     internet-facing.
+   - **Scheme:** the wizard does **not** ask for this — the ALB is created
+     **internet-facing** because you selected public subnets in step 3. (This is
+     why picking public subnets there matters: it's what makes the ALB reachable
+     by the browser.)
    - **Listener:** create a new one on **port 80 / HTTP** (or 443/HTTPS with an
      ACM certificate).
    - **Target group:** create a new one — **protocol HTTP**, the console sets
@@ -593,5 +606,7 @@ aws dynamodb put-item \
 - **Frontend loads but tasks fail to load** → `VITE_API_BASE_URL` wrong/missing, or CORS. Check the browser console; set `CORS_ORIGIN` on the backend to the exact Amplify origin.
 - **`/health` shows `in-memory`** → container can't reach DynamoDB. Check task role policy, region, table name, and that the tasks have a network path to DynamoDB (VPC endpoint or NAT).
 - **ECS task won't start / can't pull image** → task *execution* role missing ECR permissions, or wrong image URI.
+- **Service create fails: "At least two subnets in two different Availability Zones must be specified"** → the ALB needs ≥2 subnets in different AZs. In the service's Networking section, select two public subnets in two AZs (see step 2.9).
+- **ALB came out "internal" / frontend can't reach it** → the wizard infers the scheme from the subnets you chose; private subnets produce an internal ALB. Recreate the service selecting **public** subnets so the ALB is internet-facing.
 - **ALB targets unhealthy** → health check path must be `/health`, target group port must be `8080`, and the task SG must allow `8080` from the ALB SG.
 - **502 from ALB** → container not listening on `8080` or still starting; check CloudWatch logs.
