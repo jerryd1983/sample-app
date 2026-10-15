@@ -213,6 +213,15 @@ aws ecr get-login-password --region "$AWS_REGION" \
     "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 ```
 
+> **Run login and push as the same user.** `docker login` saves the ECR token to
+> the home directory of whoever runs it. `ec2-user` and `root` (via `sudo`) have
+> **separate** Docker configs, so if you log in as one and push as the other,
+> you'll get `no basic auth credentials`. The simplest fix is to drop `sudo`
+> entirely (add your user to the `docker` group — see step 2.2 — then run `docker`
+> plain). But **if you do use `sudo` for Docker, use it for every Docker command,
+> including `docker login`** — i.e. `sudo docker login ...` *and* `sudo docker
+> push ...`. Don't mix `docker login` with `sudo docker push`.
+
 **What each line does:**
 
 - `export AWS_REGION=us-east-1` — stores your AWS region in a shell variable so
@@ -430,6 +439,7 @@ aws dynamodb put-item \
 
 - **`docker build` fails with "Cannot connect to the Docker daemon ... Is the docker daemon running?"** → the Docker service isn't started. Run `sudo systemctl start docker` (and `sudo systemctl enable docker` so it starts on reboot). See step 2.2.
 - **`docker` fails with "permission denied" on `/var/run/docker.sock`** → your user isn't in the `docker` group. Run `sudo usermod -aG docker $USER` then `newgrp docker`, or prefix the command with `sudo` as a quick test.
+- **`docker push` fails with "no basic auth credentials"** → you logged in as one user and pushed as another. `docker login` and `docker push` must run as the **same** user, because `sudo` (root) and your user keep separate Docker configs. Either drop `sudo` for both, or use `sudo` for both (`sudo docker login ...` and `sudo docker push ...`). The token also expires after 12 hours — re-run `docker login` if needed.
 - **Image builds with an empty/odd name** → the `$ECR_REPO`/`$AWS_REGION`/`$AWS_ACCOUNT_ID` variables aren't set in the current shell. Re-run the `export` lines from step 2.5 and verify with `echo "$ECR_REPO"`.
 - **Frontend loads but tasks fail to load** → `VITE_API_BASE_URL` wrong/missing, or CORS. Check the browser console; set `CORS_ORIGIN` on the backend to the exact Amplify origin.
 - **`/health` shows `in-memory`** → container can't reach DynamoDB. Check task role policy, region, table name, and that the tasks have a network path to DynamoDB (VPC endpoint or NAT).
