@@ -76,7 +76,7 @@ The frontend reads `VITE_API_BASE_URL` at build time to know where the API is.
 2. Add:
    | Key                 | Value                                             |
    | ------------------- | ------------------------------------------------- |
-   | `VITE_API_BASE_URL` | `https://<your-alb-dns-name>`  (from Part 2.8)    |
+   | `VITE_API_BASE_URL` | `https://<your-alb-dns-name>`  (from Part 2.9)    |
 3. **Redeploy** so the new value is baked into the build.
 
 > If you haven't finished Part 2 yet, leave this unset for now and come back.
@@ -288,7 +288,52 @@ Your image URI (used in the ECS task definition):
 <account>.dkr.ecr.<region>.amazonaws.com/sample-app-backend:latest
 ```
 
-### 2.7 Create the ECS cluster and task definition
+### 2.7 Create the two IAM roles the task needs
+
+A Fargate task uses **two different IAM roles**, and mixing them up is a common
+source of errors. They operate at different stages:
+
+| | **Task execution role** | **Task role** |
+| --- | --- | --- |
+| **Who uses it** | The ECS/Fargate **agent** (the platform), *before* your app starts | Your **application code** inside the container, *while* it runs |
+| **What it's for** | Pulling the image from ECR and sending logs to CloudWatch | Calling AWS services your app talks to — here, DynamoDB |
+| **Analogy** | The delivery crew that sets up the container | The employee working inside the container |
+| **This app needs** | `AmazonECSTaskExecutionRolePolicy` | DynamoDB access (policy in Part 3.3) |
+
+In short: the **execution role** gets your container *running* (pull image, write
+logs); the **task role** lets the running code *do its job* (read/write
+DynamoDB). If the execution role is wrong, the task won't even start. If the task
+role is wrong, the task starts but DynamoDB calls fail (and the app falls back to
+`in-memory`).
+
+#### Create the task execution role
+
+Most accounts already have `ecsTaskExecutionRole`. The ECS console offers to
+create it automatically when you build the task definition — accept that if
+prompted. To create it manually:
+
+1. IAM console → **Roles** → **Create role**.
+2. Trusted entity: **AWS service** → use case **Elastic Container Service** →
+   **Elastic Container Service Task**.
+3. Attach the AWS managed policy **`AmazonECSTaskExecutionRolePolicy`** (grants
+   ECR pull + CloudWatch logs).
+4. Name it `ecsTaskExecutionRole` → **Create role**.
+
+#### Create the task role
+
+1. IAM console → **Roles** → **Create role**.
+2. Trusted entity: **AWS service** → use case **Elastic Container Service** →
+   **Elastic Container Service Task** (same trust as above).
+3. **Create role first** with no policy, name it `sample-app-task-role`, then
+   open it and add an **inline policy** using the DynamoDB JSON in **Part 3.3**
+   (it scopes access to just the `Tasks` table). Click through, name the policy
+   `TasksTableAccess`, and save.
+4. You'll select this role as the **Task role** in the task definition below.
+
+> You attach **both** roles in the task definition: `ecsTaskExecutionRole` as the
+> *task execution role*, and `sample-app-task-role` as the *task role*.
+
+### 2.8 Create the ECS cluster and task definition
 
 1. ECS console → **Clusters** → **Create cluster**. Choose **AWS Fargate**
    (serverless). Name it e.g. `sample-app-cluster`.
@@ -306,17 +351,16 @@ Your image URI (used in the ECS task definition):
      | `AWS_REGION`  | `us-east-1`                         |
      | `TASKS_TABLE` | `Tasks`                             |
      | `CORS_ORIGIN` | your Amplify URL (from Part 1.4)    |
-   - **Task role**: a role the container assumes to call DynamoDB. Attach the
-     policy from Part 3.3. (This is the *task role*, separate from the *task
-     execution role* below.)
-   - **Task execution role**: `ecsTaskExecutionRole` (lets ECS pull from ECR and
-     write logs). The console offers to create it if you don't have one.
+   - **Task role**: select `sample-app-task-role` (created in 2.7). This is what
+     lets the running container read/write DynamoDB.
+   - **Task execution role**: select `ecsTaskExecutionRole` (created in 2.7).
+     This lets ECS pull the image from ECR and write logs.
    - Enable **CloudWatch logs** so you can see container output.
 
-### 2.8 Create the service behind an internet-facing ALB
+### 2.9 Create the service behind an internet-facing ALB
 
 1. In the cluster → **Create service**.
-   - Launch type: **Fargate**, Task definition: the one from 2.7, Desired tasks: `1`.
+   - Launch type: **Fargate**, Task definition: the one from 2.8, Desired tasks: `1`.
 2. **Networking:**
    - Pick your VPC. Place **tasks in private subnets** (no public IP) for a clean
      setup, or public subnets with "assign public IP" on if you want to skip NAT
@@ -341,7 +385,7 @@ Your image URI (used in the ECS task definition):
    ```
    This is your `VITE_API_BASE_URL` for Part 1.3.
 
-### 2.9 Verify the backend
+### 2.10 Verify the backend
 
 ```bash
 curl http://<alb-dns-name>/health
