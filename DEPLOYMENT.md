@@ -193,6 +193,25 @@ aws ecr get-login-password --region "$AWS_REGION" \
     "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 ```
 
+**What each line does:**
+
+- `export AWS_REGION=us-east-1` — stores your AWS region in a shell variable so
+  the later commands can reuse it with `$AWS_REGION` instead of repeating it.
+- `export AWS_ACCOUNT_ID=123456789012` — stores your 12-digit AWS account ID;
+  it's part of the ECR registry address. Replace it with your real account ID.
+- `export ECR_REPO=sample-app-backend` — stores the repository name you created
+  in 2.4.
+- `echo "region='$AWS_REGION' account='$AWS_ACCOUNT_ID'"` — prints the variables
+  back so you can confirm they're set and spelled correctly (a common cause of
+  the "invalid endpoint" error is an empty region).
+- `aws configure list` — shows the CLI's effective settings; check that `region`
+  is not blank. If it is, run `aws configure set region us-east-1`.
+- `aws ecr get-login-password ...` — asks AWS for a temporary ECR login token.
+- `| docker login --username AWS --password-stdin ...` — pipes that token
+  straight into `docker login`, authenticating Docker to your account's private
+  ECR registry (`<account>.dkr.ecr.<region>.amazonaws.com`) so the next step can
+  push to it.
+
 ### 2.6 Build, tag, and push the image
 
 ```bash
