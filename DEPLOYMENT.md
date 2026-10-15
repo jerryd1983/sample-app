@@ -238,6 +238,21 @@ docker push \
   the tagged image to your private ECR repository. This is the step that
   actually gets the image into AWS so ECS can pull it.
 
+> **Why tag the image?** `docker push` figures out *where* to upload entirely
+> from the image's name — there's no separate destination argument. The full
+> name encodes the registry (your account + region), the repository, and the
+> version tag:
+> ```
+> 123456789012.dkr.ecr.us-east-1.amazonaws.com / sample-app-backend : latest
+> └──────────────── registry ────────────────┘   └── repository ──┘  └ tag ┘
+> ```
+> The build-time name (`sample-app-backend:latest`) has no registry prefix, so
+> Docker would assume Docker Hub. `docker tag` adds a second label with the full
+> ECR address — it doesn't copy the image, just points another name at the same
+> image — so `docker push` knows to send it to your ECR. The tag part (`:latest`)
+> is the version label; ECR can hold many versions of a repo, and your ECS task
+> definition pulls one by tag.
+
 Your image URI (used in the ECS task definition):
 
 ```
