@@ -436,6 +436,15 @@ definitions** → **Create new task definition** (the console form, not JSON):
 
 ### 2.9 Create the service behind an internet-facing ALB
 
+There are two ways to do this. **Option A** lets the service wizard create the
+ALB for you (fewer clicks, good for a quick demo). **Option B** creates the ALB
+yourself first (more control, lets you put tasks in private subnets with a public
+ALB, and gives you an explicit internet-facing toggle). Pick one.
+
+---
+
+#### Option A — let the service wizard create the ALB
+
 Open your cluster (`sample-app-cluster`) → the **Services** tab → **Create**.
 The new console groups the form into collapsible sections:
 
@@ -502,6 +511,65 @@ The new console groups the form into collapsible sections:
    http://sample-app-alb-123456.us-east-1.elb.amazonaws.com
    ```
    This is your `VITE_API_BASE_URL` for Part 1.3.
+
+---
+
+#### Option B — create the ALB separately first (cleaner split)
+
+This gives you an explicit **internet-facing** toggle and lets the ALB live in
+public subnets while the tasks stay in **private** subnets. Create the pieces in
+this order:
+
+**B1. Create a target group** (EC2 console → **Target Groups** → **Create target group**)
+- **Target type:** **IP addresses** (required for Fargate — not "Instances").
+- **Protocol / Port:** **HTTP** / **8080**.
+- **VPC:** your VPC.
+- **Health checks → Health check path:** `/health`.
+- **Do not register any targets** — the ECS service registers task IPs
+  automatically. Finish creating the (empty) target group.
+
+**B2. Create the ALB** (EC2 console → **Load Balancers** → **Create load balancer** → **Application Load Balancer**)
+- **Name:** `sample-app-alb`.
+- **Scheme:** **Internet-facing** ← the explicit toggle you were looking for.
+- **IP address type:** IPv4.
+- **Network mapping:** your VPC, and select **two public subnets in two
+  different AZs** (the two-AZ rule still applies).
+- **Security group:** create/attach an **ALB SG** allowing inbound **80** (and
+  **443** if using HTTPS) from `0.0.0.0/0`.
+- **Listeners and routing:** **HTTP : 80** → **forward to** the target group
+  from B1. (For HTTPS, add a 443 listener with an ACM certificate.)
+- Create the load balancer.
+
+**B3. Create the ECS service and attach the existing ALB**
+
+Cluster → **Services** tab → **Create**. Same as Option A for **Environment**
+and **Deployment configuration**, but change these two sections:
+
+- **Networking:**
+  - **Subnets:** now you can select **private** subnets (two AZs). The tasks
+    stay private; only the ALB is public.
+  - **Security group:** create the **task SG** (locked down in B4).
+  - **Public IP:** **Turned off** (private subnets). Add a **DynamoDB gateway
+    VPC endpoint** (free) or a **NAT gateway** so tasks can reach DynamoDB/ECR.
+- **Load balancing:**
+  - **Load balancer type:** **Application Load Balancer**.
+  - Choose **Use an existing load balancer** → **`sample-app-alb`**.
+  - **Listener:** choose the existing **80 : HTTP** listener.
+  - **Target group:** choose **Use an existing target group** → the one from B1.
+
+**B4. Lock down the security groups** (EC2 console → **Security Groups**)
+- **ALB SG:** inbound `80`/`443` from `0.0.0.0/0`.
+- **Task SG:** inbound `8080` **only from the ALB SG** (set the source to the ALB
+  security group, not an IP range).
+
+**B5.** Once the service is stable and the target group shows the task as
+**healthy**, grab the ALB DNS name (EC2 → Load Balancers) — that's your
+`VITE_API_BASE_URL` for Part 1.3.
+
+> **Why this is the cleaner shape:** the ALB is public (browser-reachable) while
+> the tasks have no public IP, so nothing but the load balancer is exposed. It
+> also survives a failed service create — your ALB and target group remain, so
+> you only retry the service.
 
 ### 2.10 Verify the backend
 
