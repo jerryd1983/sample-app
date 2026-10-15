@@ -146,6 +146,21 @@ aws ecr create-repository \
   --region "$AWS_REGION"
 ```
 
+> **Private vs. public:** this creates a **private** repository. ECR has two
+> separate services with two different commands:
+> - `aws ecr create-repository` → **private** registry (used here; the default)
+> - `aws ecr-public create-repository` → **public** registry (note the
+>   `ecr-public` command)
+>
+> Private is correct for this setup — your ECS task pulls the image using its
+> IAM role, so the image never needs to be public. A private image URI looks
+> like `<account>.dkr.ecr.<region>.amazonaws.com/...`; a public one would look
+> like `public.ecr.aws/...`. Confirm what you created with:
+>
+> ```bash
+> aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION"
+> ```
+
 ### 2.5 Authenticate Docker to ECR
 
 ```bash
