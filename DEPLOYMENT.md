@@ -441,6 +441,25 @@ ALB for you (fewer clicks, good for a quick demo). **Option B** creates the ALB
 yourself first (more control, lets you put tasks in private subnets with a public
 ALB, and gives you an explicit internet-facing toggle). Pick one.
 
+> **Why the ALB listener is port 80 but the target group / container is 8080.**
+> The ALB has two sides, each with its own port — they're meant to differ:
+> ```
+> Browser ──:80──▶ ALB listener (:80) ──forwards──▶ Target group (:8080) ──▶ Container (:8080)
+>          front door                                back door to the task
+> ```
+> - **Listener port 80** is the *front door* clients connect to. Port 80 is
+>   standard HTTP, so users hit `http://<alb-dns>` with no `:port` suffix. (Use
+>   443 here instead if you add HTTPS.)
+> - **Target group / container port 8080** is the *back door* the ALB forwards
+>   to. Your Express app listens on 8080 (`PORT=8080` in the task definition,
+>   `EXPOSE 8080` in the Dockerfile), so the target group must point at 8080.
+>
+> The ALB's whole job is this translation: accept traffic on the listener port
+> and forward it to targets on the target-group port. Keeping the listener on 80
+> gives a clean public URL while the container stays on 8080. The **8080 side
+> must stay consistent** everywhere: container `PORT`, task-definition port
+> mapping, target group port, and the task SG inbound rule — all `8080`.
+
 ---
 
 #### Option A — let the service wizard create the ALB
