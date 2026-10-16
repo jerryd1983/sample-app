@@ -106,9 +106,10 @@ The frontend reads `VITE_API_BASE_URL` at build time to know where the API is.
 > **`http://`** API ("mixed content"), so:
 > - If your ALB listener is **HTTPS :443** (ACM cert) → use `https://...` ✅
 > - If your ALB listener is only **HTTP :80** → an `http://...` value will be
->   **blocked** by the browser. For a demo, the quickest fixes are to add a
->   **443/HTTPS listener** to the ALB (recommended), or put **CloudFront** in
->   front of the ALB. Using a bare `http://` URL from the HTTPS site won't work.
+>   **blocked** by the browser. Add a **443/HTTPS listener** to the ALB with a
+>   custom domain + ACM certificate (see **step 2.11**), then use the
+>   `https://your-domain` value here. Using a bare `http://` URL from the HTTPS
+>   site won't work.
 
 > If you haven't finished Part 2 yet, leave this unset for now and come back.
 > Without it, the deployed site will try to call `/api/...` on the Amplify
@@ -626,6 +627,98 @@ curl http://<alb-dns-name>/health
 If `storage` says `in-memory`, the container couldn't reach DynamoDB — check the
 task role permissions (Part 3.3) and the `AWS_REGION`/`TASKS_TABLE` env vars.
 
+> At this point `curl http://<alb-dns>/health` works, but the **browser** can't
+> call the API yet: the Amplify site is HTTPS and the ALB is HTTP-only, so the
+> call is blocked as mixed content. Step 2.11 adds HTTPS to the ALB with your own
+> domain + an ACM certificate.
+
+### 2.11 Add HTTPS to the ALB with a custom domain + ACM certificate
+
+The browser needs to reach the API over **HTTPS**. A public ACM certificate can
+only be issued for a **domain you own** — not for the raw
+`...elb.amazonaws.com` name — so this path is: **register a domain → request &
+validate an ACM cert → point the domain at the ALB → add a 443 listener → use
+the `https://` domain as the API URL.**
+
+> Order note: do 2.1–2.10 first (the ALB must already exist). The ACM cert must
+> be in the **same region as the ALB**.
+
+#### 2.11.1 Register (buy) a domain
+
+Easiest if you keep everything in AWS: **Route 53 console → Registered domains →
+Register domains**, search for a name, add it to the cart, and complete the
+purchase. Registration takes a few minutes to a few hours; Route 53 creates a
+**hosted zone** for the domain automatically.
+
+> You can also use a domain from any other registrar — you'll just add the DNS
+> records (cert validation + the ALB alias/CNAME) at that registrar instead of
+> Route 53.
+
+Pick the hostname you'll use for the API, e.g. `api.yourdomain.com`.
+
+#### 2.11.2 Request a public ACM certificate
+
+1. **ACM (Certificate Manager) console** — set the region (top-right) to the
+   **same region as your ALB** (e.g. `us-east-1`).
+2. **Request a certificate** → **Request a public certificate** → **Next**.
+3. **Fully qualified domain name:** `api.yourdomain.com` (or `yourdomain.com`
+   plus `*.yourdomain.com` if you want a wildcard).
+4. **Validation method:** **DNS validation** (recommended).
+5. **Request.** The cert shows status **Pending validation**.
+
+#### 2.11.3 Validate the certificate (DNS)
+
+1. Open the pending certificate in ACM → it shows a **CNAME name/value** pair
+   for each domain.
+2. If the domain is in **Route 53**, click **Create records in Route 53** —
+   ACM adds the validation CNAME for you. (Otherwise copy the CNAME into your
+   registrar's DNS.)
+3. Wait until the certificate status flips to **Issued** (usually a few
+   minutes).
+
+#### 2.11.4 Add a 443 (HTTPS) listener to the ALB
+
+1. **EC2 console → Load Balancers →** select `sample-app-alb` → **Listeners**
+   tab → **Add listener**.
+2. **Protocol : Port** = **HTTPS : 443**.
+3. **Default action:** **Forward to** your target group (the one on port 8080
+   from 2.9 / B1).
+4. **Default SSL/TLS certificate:** choose **From ACM** → the certificate you
+   just issued.
+5. (Optional) Edit the existing **HTTP :80** listener to **redirect to HTTPS
+   :443** so everything uses TLS.
+6. **Security group:** make sure the **ALB SG** allows inbound **443** from
+   `0.0.0.0/0` (add the rule if it only had 80).
+7. **Add**.
+
+#### 2.11.5 Point the domain at the ALB
+
+1. **Route 53 → Hosted zones →** your domain → **Create record**.
+2. **Record name:** `api` (for `api.yourdomain.com`).
+3. **Record type:** **A**.
+4. **Alias:** **on** → **Route traffic to** → **Alias to Application and
+   Classic Load Balancer** → your region → select `sample-app-alb`.
+5. **Create records.** (Non-Route 53 registrars: create a **CNAME** from
+   `api.yourdomain.com` to the ALB DNS name instead.)
+
+#### 2.11.6 Verify and wire up the frontend
+
+```bash
+curl -i https://api.yourdomain.com/health
+# -> HTTP/1.1 200 OK  {"status":"ok","storage":"dynamodb"}
+```
+
+Once that returns 200 over **https**, set the Amplify env var and redeploy:
+
+- `VITE_API_BASE_URL` = `https://api.yourdomain.com`  (see step 1.3)
+- Redeploy the Amplify app so the value is baked into the build.
+
+The frontend is now an HTTPS page calling an HTTPS API — no mixed-content block.
+
+> Don't forget to update the backend's **`CORS_ORIGIN`** (task definition env
+> var) to your Amplify URL and force a new ECS deployment, so the browser's
+> cross-origin calls are allowed.
+
 ---
 
 ## Part 3 — Create the database (DynamoDB)
@@ -740,10 +833,11 @@ Then **Create item**. Reload the app to see it listed.
 
 1. [ ] **Part 3** — DynamoDB `Tasks` table created and `ACTIVE`; task-role policy ready.
 2. [ ] **Part 2** — EC2 built the image and pushed to ECR.
-3. [ ] **Part 2** — ECS service running behind an internet-facing ALB; `/health` returns `"storage":"dynamodb"`.
-4. [ ] **Part 1** — Amplify connected to GitHub, `VITE_API_BASE_URL` = ALB URL, redeployed.
-5. [ ] **Part 2** — Backend `CORS_ORIGIN` = Amplify URL (update the task definition and redeploy the service if you set it after Part 1).
-6. [ ] Open the Amplify URL, add a task, confirm it appears (and shows up in the DynamoDB console under **Explore table items**).
+3. [ ] **Part 2** — ECS service running behind an internet-facing ALB; `curl http://<alb-dns>/health` returns `"storage":"dynamodb"`.
+4. [ ] **Part 2 (2.11)** — Domain registered, ACM cert **Issued**, ALB **443/HTTPS** listener added, DNS points at the ALB; `curl https://<your-domain>/health` returns 200.
+5. [ ] **Part 1** — Amplify connected to GitHub, `VITE_API_BASE_URL` = **`https://<your-domain>`**, redeployed.
+6. [ ] **Part 2** — Backend `CORS_ORIGIN` = Amplify URL (update the task definition and redeploy the service if you set it after Part 1).
+7. [ ] Open the Amplify URL, add a task, confirm it appears (and shows up in the DynamoDB console under **Explore table items**).
 
 ## Troubleshooting
 
@@ -753,7 +847,7 @@ Then **Create item**. Reload the app to see it listed.
 - **Image builds with an empty/odd name** → the `$ECR_REPO`/`$AWS_REGION`/`$AWS_ACCOUNT_ID` variables aren't set in the current shell. Re-run the `export` lines from step 2.5 and verify with `echo "$ECR_REPO"`.
 - **Frontend loads but tasks fail to load** → `VITE_API_BASE_URL` wrong/missing, or CORS. Check the browser console; set `CORS_ORIGIN` on the backend to the exact Amplify origin.
 - **"Request failed (404)" from the app, footer shows a bare `...elb.amazonaws.com`** → `VITE_API_BASE_URL` is missing its scheme. It must start with `https://` (or `http://`), have no trailing slash, and you must **redeploy** after changing it (env vars bake in at build time). See step 1.3.
-- **API call blocked / fails from the HTTPS site to an `http://` ALB** → mixed content: the browser won't let an HTTPS page call an HTTP API. Add a 443/HTTPS listener to the ALB (or front it with CloudFront) and point `VITE_API_BASE_URL` at the `https://` URL, then redeploy.
+- **API call blocked / fails from the HTTPS site to an `http://` ALB** → mixed content: the browser won't let an HTTPS page call an HTTP API. Add a 443/HTTPS listener to the ALB with a domain + ACM cert (step 2.11) and point `VITE_API_BASE_URL` at the `https://your-domain` URL, then redeploy. (`curl http://<alb-dns>` still works because curl has no mixed-content rule — the block is browser-only.)
 - **`/health` shows `in-memory`** → container can't reach DynamoDB. Check task role policy, region, table name, and that the tasks have a network path to DynamoDB (VPC endpoint or NAT).
 - **ECS task won't start / can't pull image** → task *execution* role missing ECR permissions, or wrong image URI.
 - **Service create fails: "At least two subnets in two different Availability Zones must be specified"** → the ALB needs ≥2 subnets in different AZs. In the service's Networking section, select two public subnets in two AZs (see step 2.9).
