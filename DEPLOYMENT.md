@@ -94,6 +94,22 @@ The frontend reads `VITE_API_BASE_URL` at build time to know where the API is.
    | `VITE_API_BASE_URL` | `https://<your-alb-dns-name>`  (from Part 2.9)    |
 3. **Redeploy** so the new value is baked into the build.
 
+> **Include the scheme (`http://` or `https://`) — don't paste the bare DNS
+> name.** The value must start with a scheme, e.g.
+> `https://ecs-alb-902403053.us-east-1.elb.amazonaws.com`, **not**
+> `ecs-alb-902403053.us-east-1.elb.amazonaws.com`. Without a scheme the browser
+> builds the wrong request URL and the API calls fail (often a 404). No trailing
+> slash.
+>
+> **Match the scheme to your ALB listener, and mind mixed content.** Your Amplify
+> site is served over **HTTPS**. Browsers block an HTTPS page from calling an
+> **`http://`** API ("mixed content"), so:
+> - If your ALB listener is **HTTPS :443** (ACM cert) → use `https://...` ✅
+> - If your ALB listener is only **HTTP :80** → an `http://...` value will be
+>   **blocked** by the browser. For a demo, the quickest fixes are to add a
+>   **443/HTTPS listener** to the ALB (recommended), or put **CloudFront** in
+>   front of the ALB. Using a bare `http://` URL from the HTTPS site won't work.
+
 > If you haven't finished Part 2 yet, leave this unset for now and come back.
 > Without it, the deployed site will try to call `/api/...` on the Amplify
 > origin and fail — that's expected until the backend URL is set.
@@ -736,6 +752,8 @@ Then **Create item**. Reload the app to see it listed.
 - **`docker push` fails with "no basic auth credentials"** → you logged in as one user and pushed as another. `docker login` and `docker push` must run as the **same** user, because `sudo` (root) and your user keep separate Docker configs. Either drop `sudo` for both, or use `sudo` for both (`sudo docker login ...` and `sudo docker push ...`). The token also expires after 12 hours — re-run `docker login` if needed.
 - **Image builds with an empty/odd name** → the `$ECR_REPO`/`$AWS_REGION`/`$AWS_ACCOUNT_ID` variables aren't set in the current shell. Re-run the `export` lines from step 2.5 and verify with `echo "$ECR_REPO"`.
 - **Frontend loads but tasks fail to load** → `VITE_API_BASE_URL` wrong/missing, or CORS. Check the browser console; set `CORS_ORIGIN` on the backend to the exact Amplify origin.
+- **"Request failed (404)" from the app, footer shows a bare `...elb.amazonaws.com`** → `VITE_API_BASE_URL` is missing its scheme. It must start with `https://` (or `http://`), have no trailing slash, and you must **redeploy** after changing it (env vars bake in at build time). See step 1.3.
+- **API call blocked / fails from the HTTPS site to an `http://` ALB** → mixed content: the browser won't let an HTTPS page call an HTTP API. Add a 443/HTTPS listener to the ALB (or front it with CloudFront) and point `VITE_API_BASE_URL` at the `https://` URL, then redeploy.
 - **`/health` shows `in-memory`** → container can't reach DynamoDB. Check task role policy, region, table name, and that the tasks have a network path to DynamoDB (VPC endpoint or NAT).
 - **ECS task won't start / can't pull image** → task *execution* role missing ECR permissions, or wrong image URI.
 - **Service create fails: "At least two subnets in two different Availability Zones must be specified"** → the ALB needs ≥2 subnets in different AZs. In the service's Networking section, select two public subnets in two AZs (see step 2.9).
