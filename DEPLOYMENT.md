@@ -521,12 +521,22 @@ public subnets while the tasks stay in **private** subnets. Create the pieces in
 this order:
 
 **B1. Create a target group** (EC2 console → **Target Groups** → **Create target group**)
-- **Target type:** **IP addresses** (required for Fargate — not "Instances").
+- **Target type:** **IP addresses** (not "Instances"; there is intentionally no
+  "ECS/Fargate" option).
+
+  > **Why IP addresses?** Fargate tasks aren't EC2 instances you own — each task
+  > gets its own elastic network interface (ENI) with a **private IP** in your
+  > VPC, and there's no instance ID to register. So the ALB routes to the task's
+  > **IP**. The other target types — **Instances** (EC2 only), **Lambda**, and
+  > **Application Load Balancer** — don't apply to Fargate.
 - **Protocol / Port:** **HTTP** / **8080**.
-- **VPC:** your VPC.
+- **IP address type:** **IPv4**.
+- **VPC:** your VPC (IP targets must live in the same VPC as the tasks).
 - **Health checks → Health check path:** `/health`.
-- **Do not register any targets** — the ECS service registers task IPs
-  automatically. Finish creating the (empty) target group.
+- **Do not register any targets** — leave the "Register targets" step empty. The
+  ECS **service** registers each task's IP automatically (and de-registers them
+  when tasks stop or get replaced). Manually added IPs would go stale. Finish
+  creating the (empty) target group.
 
 **B2. Create the ALB** (EC2 console → **Load Balancers** → **Create load balancer** → **Application Load Balancer**)
 - **Name:** `sample-app-alb`.
