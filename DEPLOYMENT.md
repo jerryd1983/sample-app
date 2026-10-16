@@ -617,35 +617,61 @@ task role permissions (Part 3.3) and the `AWS_REGION`/`TASKS_TABLE` env vars.
 > **Do this first**, before the backend service runs, so the table exists when
 > the container starts.
 
-### 3.1 Create the table
+### 3.1 Create the table — console (GUI)
 
-The app uses a single table with a string partition key `id`:
+The app uses a single table with a string partition key `id`.
 
-```bash
-aws dynamodb create-table \
-  --table-name "$TASKS_TABLE" \
-  --attribute-definitions AttributeName=id,AttributeType=S \
-  --key-schema AttributeName=id,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST \
-  --region "$AWS_REGION"
-```
+1. Open the **DynamoDB** console.
+2. Confirm the **region** (top-right) matches the one your ECS task uses
+   (e.g. `us-east-1`). The app looks for the table in `AWS_REGION`.
+3. Left nav → **Tables** → **Create table**.
+4. **Table name:** `Tasks` (must match the `TASKS_TABLE` env var exactly —
+   it's case-sensitive).
+5. **Partition key:** `id`, type **String**.
+6. **Sort key:** leave **empty** (this app doesn't use one).
+7. **Table settings:** choose **Customize settings** (so you can pick the
+   billing mode), then under **Read/write capacity settings** select
+   **On-demand**. (On-demand = no capacity planning and near-zero cost for a
+   demo. "Default settings" also uses on-demand in current consoles — either is
+   fine.)
+8. Leave everything else at defaults and click **Create table**.
 
-`PAY_PER_REQUEST` (on-demand) means no capacity planning and near-zero cost for a demo.
+> **CLI alternative** (if you prefer): 
+> ```bash
+> aws dynamodb create-table \
+>   --table-name "$TASKS_TABLE" \
+>   --attribute-definitions AttributeName=id,AttributeType=S \
+>   --key-schema AttributeName=id,KeyType=HASH \
+>   --billing-mode PAY_PER_REQUEST \
+>   --region "$AWS_REGION"
+> ```
 
 ### 3.2 Confirm it's active
 
-```bash
-aws dynamodb describe-table \
-  --table-name "$TASKS_TABLE" \
-  --region "$AWS_REGION" \
-  --query "Table.TableStatus"
-# -> "ACTIVE"
-```
+In the DynamoDB console → **Tables**, the `Tasks` table should show **Status =
+Active** within a few seconds. Click the table to see its details (partition key
+`id`, on-demand capacity).
 
-### 3.3 IAM policy for the ECS task role
+> **CLI alternative:**
+> ```bash
+> aws dynamodb describe-table \
+>   --table-name "$TASKS_TABLE" \
+>   --region "$AWS_REGION" \
+>   --query "Table.TableStatus"
+> # -> "ACTIVE"
+> ```
 
-Attach this policy to the **ECS task role** from Part 2.7 so the container can
-read/write the table. Replace the account ID/region/table in the ARN:
+### 3.3 IAM policy for the ECS task role — console (GUI)
+
+Attach this policy to the **ECS task role** (`sample-app-task-role`, from Part
+2.7) so the container can read/write the table:
+
+1. IAM console → **Roles** → open **`sample-app-task-role`**.
+2. **Add permissions** → **Create inline policy**.
+3. Click the **JSON** tab and paste the policy below. **Replace** the account ID
+   and region in the `Resource` ARN with your own (and the table name if you
+   didn't use `Tasks`).
+4. **Next** → name it `TasksTableAccess` → **Create policy**.
 
 ```json
 {
@@ -666,22 +692,31 @@ read/write the table. Replace the account ID/region/table in the ARN:
 }
 ```
 
-### 3.4 (Optional) Seed or inspect data
+### 3.4 (Optional) Seed or inspect data — console (GUI)
 
-List items:
+**View items:** DynamoDB console → **Tables** → `Tasks` → **Explore table items**.
+Items created through the app appear here; click **Run** to refresh the scan.
 
-```bash
-aws dynamodb scan --table-name "$TASKS_TABLE" --region "$AWS_REGION"
-```
+**Add a test item manually:** on the **Explore table items** page → **Create
+item**. Use the form (or the **JSON view** toggle) to add:
+- `id` (String) — e.g. `demo-1`
+- `title` (String) — e.g. `Hello from DynamoDB`
+- `completed` (Boolean) — `false`
+- `createdAt` (Number) — e.g. `1700000000000`
 
-Add a test item directly:
+Then **Create item**. Reload the app to see it listed.
 
-```bash
-aws dynamodb put-item \
-  --table-name "$TASKS_TABLE" \
-  --item '{"id":{"S":"demo-1"},"title":{"S":"Hello from DynamoDB"},"completed":{"BOOL":false},"createdAt":{"N":"1700000000000"}}' \
-  --region "$AWS_REGION"
-```
+> **CLI alternative:**
+> ```bash
+> # list items
+> aws dynamodb scan --table-name "$TASKS_TABLE" --region "$AWS_REGION"
+>
+> # add a test item
+> aws dynamodb put-item \
+>   --table-name "$TASKS_TABLE" \
+>   --item '{"id":{"S":"demo-1"},"title":{"S":"Hello from DynamoDB"},"completed":{"BOOL":false},"createdAt":{"N":"1700000000000"}}' \
+>   --region "$AWS_REGION"
+> ```
 
 ---
 
@@ -692,7 +727,7 @@ aws dynamodb put-item \
 3. [ ] **Part 2** — ECS service running behind an internet-facing ALB; `/health` returns `"storage":"dynamodb"`.
 4. [ ] **Part 1** — Amplify connected to GitHub, `VITE_API_BASE_URL` = ALB URL, redeployed.
 5. [ ] **Part 2** — Backend `CORS_ORIGIN` = Amplify URL (update the task definition and redeploy the service if you set it after Part 1).
-6. [ ] Open the Amplify URL, add a task, confirm it appears (and shows up in `dynamodb scan`).
+6. [ ] Open the Amplify URL, add a task, confirm it appears (and shows up in the DynamoDB console under **Explore table items**).
 
 ## Troubleshooting
 
